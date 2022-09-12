@@ -52,6 +52,8 @@ export const getErc20Balance = async (
 };
 
 async function main() {
+  // 여기에 이제 코드를 작성하면 됩니다.
+
   // ABI 대신에 solidity 컨트랙트 코드를 읽는 식으로 동작하는듯 함
   const Flashloan = await getContractFromAddress(
     "DODOFlashloan",
