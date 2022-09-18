@@ -1,10 +1,16 @@
 import { Contract } from "ethers";
 import { ethers } from "hardhat";
-import { TOKENS_MAP } from "../constants/tokens";
+import { TOKENS, TOKENS_MAP } from "../constants/tokens";
 import factoryAbi from "../abis/factory.json";
 import exchangeAbi from "../abis/exchange.json";
 import flashLoanAbi from "../abis/flashLoan.json";
 import { DODOFlashloan__factory, ERC20Mock__factory } from "../test/typechain";
+
+// TODO: change it to simple and readable code
+// 1. 거래 가능한 토큰의 종류를 불러온다.
+// 토큰중 2개에 대해서 아래를 진행
+// 2. 각 토큰과 USDC 풀의 주소를 구한다.
+// 3. 아비트라지 기회를 찾는다.
 
 const getPairAddress = async (address1: string, address2: string) => {
   const pairAddress = await factoryContract.methods
@@ -89,14 +95,7 @@ const factoryContract = new web3.eth.Contract(
   factoryAbi as any,
   "0x9F3044f7F9FC8bC9eD615d54845b4577B833282d"
 );
-const ETH_USDC_Contract = new web3.eth.Contract(
-  exchangeAbi as any,
-  ETH_USDC_POOL
-);
-const MESH_USDC_Contract = new web3.eth.Contract(
-  exchangeAbi as any,
-  MESH_USDC_POOL
-);
+
 const ETH_MESH_Contract = new web3.eth.Contract(
   exchangeAbi as any,
   ETH_MESH_POOL
@@ -151,80 +150,107 @@ export const getErc20Balance = async (
   console.log(name, ethers.utils.formatUnits(balance, decimals));
 };
 
-const findArbitrage = async () => {
-  const ETH_poolName = await ETH_USDC_Contract.methods.name().call();
-  const ETH_poolInfo = await ETH_USDC_Contract.methods.getReserves().call();
+const findArbitrage = async (tokenA, tokenB) => {
+  // tokenA, tokenB에 대한 pool address 가져오기
 
-  const { token0: ETH_token0, token1: ETH_token1 } =
-    getTokensInPool(ETH_poolName);
+  const tokenA_USDC_Pool = getPairAddress(tokenA, TOKENS_MAP["USDC"]);
+  const tokenB_USDC_Pool = getPairAddress(tokenB, TOKENS_MAP["USDC"]);
+  const tokenA_tokenB_Pool = getPairAddress(tokenA, tokenB);
 
-  const ETH_poolUSDCPrice = getUSDCPrice(ETH_poolInfo, ETH_token0, ETH_token1);
-  // console.log(ETH_poolUSDCPrice.toFixed(10));
+  const tokenA_USDC_Contract = new web3.eth.Contract(
+    exchangeAbi as any,
+    tokenA_USDC_Pool
+  );
 
-  const MESH_poolName = await MESH_USDC_Contract.methods.name().call();
-  const MESH_poolInfo = await MESH_USDC_Contract.methods.getReserves().call();
+  const tokenB_USDC_Contract = new web3.eth.Contract(
+    exchangeAbi as any,
+    tokenB_USDC_Pool
+  );
 
-  const { token0: MESH_token0, token1: MESH_token1 } =
-    getTokensInPool(MESH_poolName);
+  const tokenA_tokenB_Contract = new web3.eth.Contract(
+    exchangeAbi as any,
+    tokenA_tokenB_Pool
+  );
 
-  const MESH_poolUSDCPrice = getUSDCPrice(
-    MESH_poolInfo,
-    MESH_token0,
-    MESH_token1
+  const tokenA_poolName = await tokenA_USDC_Contract.methods.name().call();
+  const tokenA_poolInfo = await tokenA_USDC_Contract.methods
+    .getReserves()
+    .call();
+
+  const { token0: tokenA_token0, token1: tokenA_token1 } =
+    getTokensInPool(tokenA_poolName);
+
+  const tokenA_poolUSDCPrice = getUSDCPrice(
+    tokenA_poolInfo,
+    tokenA_token0,
+    tokenA_token1
+  );
+  // console.log(tokenA_relativePriceInMesh.toFixed(10));
+
+  const tokenB_poolName = await tokenB_USDC_Contract.methods.name().call();
+  const tokenB_poolInfo = await tokenB_USDC_Contract.methods
+    .getReserves()
+    .call();
+
+  const { token0: tokenB_token0, token1: tokenB_token1 } =
+    getTokensInPool(tokenB_poolName);
+
+  const tokenB_poolUSDCPrice = getUSDCPrice(
+    tokenB_poolInfo,
+    tokenB_token0,
+    tokenB_token1
   );
 
   // console.log(MESH_poolUSDCPrice.toFixed(10));
 
-  const ETH_MESH_poolInfo = await ETH_MESH_Contract.methods
+  const tokenA_tokenB_poolInfo = await tokenA_tokenB_Contract.methods
     .getReserves()
     .call();
 
-  const ETH_MESH_poolName = await ETH_MESH_Contract.methods.name().call();
+  const tokenA_tokenB_poolName = await tokenA_tokenB_Contract.methods
+    .name()
+    .call();
 
-  const { token0: ETH_MESH_token0, token1: ETH_MESH_token1 } =
-    getTokensInPool(ETH_MESH_poolName);
+  const { token0: tokenA_tokenB_token0, token1: tokenA_tokenB_token1 } =
+    getTokensInPool(tokenA_tokenB_poolName);
 
   const { token0Price, token1Price } = getRelativePrice(
-    ETH_MESH_poolInfo,
-    ETH_MESH_token0,
-    ETH_MESH_token1
+    tokenA_tokenB_poolInfo,
+    tokenA_tokenB_token0,
+    tokenA_tokenB_token1
   );
 
   // console.log(ETH_MESH_token0.symbol, ETH_MESH_token1.symbol);
   // console.log(token0Price.price.toFixed(10), token1Price.price.toFixed(10));
 
-  const ETH_relativePriceInMesh = getRelativeUSDCPrice(
-    MESH_poolUSDCPrice,
+  const tokenA_relativePriceInMesh = getRelativeUSDCPrice(
+    tokenB_poolUSDCPrice,
     token0Price.targetToken === "ETH" ? token0Price.price : token1Price.price
   );
 
-  const MESH_relativePriceInETH = getRelativeUSDCPrice(
-    ETH_poolUSDCPrice,
+  const tokenB_relativePriceInETH = getRelativeUSDCPrice(
+    tokenA_poolUSDCPrice,
     token0Price.targetToken === "MESH" ? token0Price.price : token1Price.price
   );
 
-  console.log(ETH_poolUSDCPrice.toFixed(10), "eth price");
-  console.log(ETH_relativePriceInMesh.toFixed(10), "ETH_relativePriceInMesh");
+  console.log(tokenA_relativePriceInMesh.toFixed(10), "eth price");
+  console.log(
+    tokenA_relativePriceInMesh.toFixed(10),
+    "ETH_relativePriceInMesh"
+  );
 
-  console.log(MESH_poolUSDCPrice.toFixed(10), "mesh price");
-  console.log(MESH_relativePriceInETH.toFixed(10), "MESH_relativePriceInETH");
+  console.log(tokenB_poolUSDCPrice.toFixed(10), "mesh price");
+  console.log(tokenB_relativePriceInETH.toFixed(10), "MESH_relativePriceInETH");
   // 남은 일이 무엇이냐, 각 토큰의 가격을 USDC로 나타내기, 실제 가격 보다 비싼 놈을 USDC로 매수 하기, 두개 페어에서 비싼 토큰을 팔기, 판토큰을 다시 USDC로 바꾸기
   // 여기서부터는 플래시론을 써야 한다.
 
   let res;
 
-  if (MESH_poolUSDCPrice.isGreaterThan(MESH_relativePriceInETH)) {
-    res = await executeFlashLoan(
-      TOKENS_MAP.WETH.address,
-      TOKENS_MAP.MESH.address,
-      erc20Address.USDC
-    );
+  if (tokenB_poolUSDCPrice.isGreaterThan(tokenB_relativePriceInETH)) {
+    // TODO: CHANGE to executedodoflash
+    res = await executeFlashLoan(tokenA, tokenB, erc20Address.USDC);
   } else {
-    res = await executeFlashLoan(
-      TOKENS_MAP.MESH.address,
-      TOKENS_MAP.WETH.address,
-      erc20Address.USDC
-    );
+    res = await executeFlashLoan(tokenB, tokenA, erc20Address.USDC);
   }
 
   // 사야 하는 토큰, 바뀌어야 하는 토큰, 대출토큰 이 세가지를 리턴하자.
@@ -256,7 +282,13 @@ async function executeDODOFlash() {
 }
 
 async function main() {
-  const [tokenToBuy, tokenToSell, tokenToPay] = findArbitrage();
+  TOKENS.forEach((token, i) => {
+    if (i === TOKENS.length - 1) return;
+    const [tokenToBuy, tokenToSell, tokenToPay] = findArbitrage(
+      token,
+      TOKENS[i + 1]
+    );
+  });
 
   if (false) {
     executeDODOFlash();
