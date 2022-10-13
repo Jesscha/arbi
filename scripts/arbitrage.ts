@@ -1,9 +1,10 @@
 import { Contract } from "ethers";
 import { ethers } from "hardhat";
-import { TOKENS, TOKENS_MAP } from "../constants/tokens";
 import factoryAbi from "../abis/factory.json";
 import exchangeAbi from "../abis/exchange.json";
-import flashLoanAbi from "../abis/flashLoan.json";
+import { BigNumber } from "bignumber.js";
+import Web3 from "web3";
+import tokens from "../constants/tokens.json";
 import { DODOFlashloan__factory, ERC20Mock__factory } from "../test/typechain";
 
 // TODO: change it to simple and readable code
@@ -12,23 +13,31 @@ import { DODOFlashloan__factory, ERC20Mock__factory } from "../test/typechain";
 // 2. 각 토큰과 USDC 풀의 주소를 구한다.
 // 3. 아비트라지 기회를 찾는다.
 
+const TOKENS_MAP = tokens.reduce((prev, cur) => {
+  prev[cur.symbol] = cur;
+  return prev;
+}, {} as any);
+
 const getPairAddress = async (address1: string, address2: string) => {
-  const pairAddress = await factoryContract.methods
-    .getPair(address1, address2)
-    .call();
-  console.log(pairAddress);
-  return pairAddress;
+  try {
+    console.log("a");
+    const pairAddress = await factoryContract.methods
+      .getPair(address1, address2)
+      .call();
+    console.log("b");
+
+    console.log(pairAddress);
+    return pairAddress;
+  } catch (e) {
+    console.log(e);
+  }
 };
 
 const divideDecimals = (amount: string, decimals: number) => {
   return new BigNumber(amount).dividedBy(new BigNumber(10).pow(decimals));
 };
 
-const getUSDCPrice = (
-  pool: any,
-  token0: TOKEN_TYPE,
-  token1: TOKEN_TYPE
-): BigNumber => {
+const getUSDCPrice = (pool: any, token0: any, token1: any): BigNumber => {
   const isToken0USDC = token0.symbol === "USDC";
   const token0Amount = divideDecimals(pool[0], token0.decimals);
   const token1Amount = divideDecimals(pool[1], token1.decimals);
@@ -43,11 +52,7 @@ const getUSDCPrice = (
   }
 };
 
-const getRelativePrice = (
-  pool: any,
-  token0: TOKEN_TYPE,
-  token1: TOKEN_TYPE
-) => {
+const getRelativePrice = (pool: any, token0: any, token1: any) => {
   const token0Amount = divideDecimals(pool[0], token0.decimals);
   const token1Amount = divideDecimals(pool[1], token1.decimals);
 
@@ -151,11 +156,21 @@ export const getErc20Balance = async (
 };
 
 const doArbitrage = async (tokenA: any, tokenB: any) => {
-  // tokenA, tokenB에 대한 pool address 가져오기
+  const tokenA_USDC_Pool = await getPairAddress(
+    tokenA.address,
+    TOKENS_MAP["USDC"].address
+  );
+  const tokenB_USDC_Pool = await getPairAddress(
+    tokenB.address,
+    TOKENS_MAP["USDC"].address
+  );
+  const tokenA_tokenB_Pool = await getPairAddress(
+    tokenA.address,
+    tokenB.address
+  );
 
-  const tokenA_USDC_Pool = getPairAddress(tokenA, TOKENS_MAP["USDC"]);
-  const tokenB_USDC_Pool = getPairAddress(tokenB, TOKENS_MAP["USDC"]);
-  const tokenA_tokenB_Pool = getPairAddress(tokenA, tokenB);
+  console.log("??");
+  const web3 = new Web3("https://polygon-rpc.com");
 
   const tokenA_USDC_Contract = new web3.eth.Contract(
     exchangeAbi as any,
@@ -277,16 +292,22 @@ async function executeDODOFlash(tokenA: any, tokenB: any, tokensToPay: any) {
 }
 
 async function main() {
-  TOKENS.forEach((token, i) => {
-    if (i === TOKENS.length - 1) return;
+  tokens.forEach(async (token, i) => {
+    if (i === tokens.length - 1) return;
 
-    doArbitrage(token, TOKENS[i + 1]);
+    await doArbitrage(token, tokens[i + 1]);
   });
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    console.error(error);
-    process.exit(1);
-  });
+const startProcess =
+  (process: CallableFunction) =>
+  async (...args: any) => {
+    try {
+      await process(...args);
+    } catch (e) {
+      console.log(e);
+      startProcess(process)(...args);
+    }
+  };
+
+startProcess(main)();
