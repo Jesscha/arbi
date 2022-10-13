@@ -150,7 +150,7 @@ export const getErc20Balance = async (
   console.log(name, ethers.utils.formatUnits(balance, decimals));
 };
 
-const findArbitrage = async (tokenA, tokenB) => {
+const doArbitrage = async (tokenA: any, tokenB: any) => {
   // tokenA, tokenB에 대한 pool address 가져오기
 
   const tokenA_USDC_Pool = getPairAddress(tokenA, TOKENS_MAP["USDC"]);
@@ -214,14 +214,13 @@ const findArbitrage = async (tokenA, tokenB) => {
   const { token0: tokenA_tokenB_token0, token1: tokenA_tokenB_token1 } =
     getTokensInPool(tokenA_tokenB_poolName);
 
+  console.log(tokenA_tokenB_token0, tokenA_tokenB_token1);
+
   const { token0Price, token1Price } = getRelativePrice(
     tokenA_tokenB_poolInfo,
     tokenA_tokenB_token0,
     tokenA_tokenB_token1
   );
-
-  // console.log(ETH_MESH_token0.symbol, ETH_MESH_token1.symbol);
-  // console.log(token0Price.price.toFixed(10), token1Price.price.toFixed(10));
 
   const tokenA_relativePriceInMesh = getRelativeUSDCPrice(
     tokenB_poolUSDCPrice,
@@ -248,17 +247,13 @@ const findArbitrage = async (tokenA, tokenB) => {
 
   if (tokenB_poolUSDCPrice.isGreaterThan(tokenB_relativePriceInETH)) {
     // TODO: CHANGE to executedodoflash
-    res = await executeFlashLoan(tokenA, tokenB, erc20Address.USDC);
+    res = await executeDODOFlash(tokenA, tokenB, erc20Address.USDC);
   } else {
-    res = await executeFlashLoan(tokenB, tokenA, erc20Address.USDC);
+    res = await executeDODOFlash(tokenB, tokenA, erc20Address.USDC);
   }
-
-  // 사야 하는 토큰, 바뀌어야 하는 토큰, 대출토큰 이 세가지를 리턴하자.
 };
 
-async function executeDODOFlash() {
-  // 여기에 이제 코드를 작성하면 됩니다.
-
+async function executeDODOFlash(tokenA: any, tokenB: any, tokensToPay: any) {
   // ABI 대신에 solidity 컨트랙트 폴더의 파일을 읽는 식으로 동작하는듯 함
   const Flashloan = await getContractFromAddress(
     "DODOFlashloan",
@@ -273,9 +268,9 @@ async function executeDODOFlash() {
   const tx = await Flashloan.dodoFlashLoan(
     dodoV2Pool.WETH_USDC,
     getBigNumber(1000, 6),
-    erc20Address.USDC,
-    erc20Address.WETH,
-    erc20Address.WMATIC
+    tokensToPay,
+    tokenA,
+    tokenB
   );
 
   await getErc20Balance(USDC, owner.address, "balance", 6);
@@ -284,15 +279,9 @@ async function executeDODOFlash() {
 async function main() {
   TOKENS.forEach((token, i) => {
     if (i === TOKENS.length - 1) return;
-    const [tokenToBuy, tokenToSell, tokenToPay] = findArbitrage(
-      token,
-      TOKENS[i + 1]
-    );
-  });
 
-  if (false) {
-    executeDODOFlash();
-  }
+    doArbitrage(token, TOKENS[i + 1]);
+  });
 }
 
 main()
